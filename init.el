@@ -90,7 +90,9 @@
 (use-package hydra
   :config
   (defhydra hydra-mainmenu (:exit t :hint t)
-    ("e" eval-last-sexp "evaluate expr")))
+    ("e" eval-last-sexp "evaluate expr")
+    ("x" execute-extended-command "exec ext comm")
+    ))
 
 (use-package rainbow-delimiters
   :straight (:host github
@@ -149,6 +151,7 @@
           (projectile-switch-project-action
            (lambda ()
              (counsel-fzf))))
+
       (counsel-projectile-switch-project-by-name project))))
 
 (use-package ivy
@@ -205,5 +208,105 @@
   :commands (swiper)
   :diminish ivy-mode)
 
+(use-package flycheck
+  :if (not (eq system-type 'windows-nt))
+  :defer 8
+  :diminish flycheck-mode
+  :commands (flycheck-mode)
+  :config
+  (setq flycheck-idle-change-delay 1.2)
+  (setq-default flycheck-emacs-lisp-load-path 'inherit)
+  (setq-default flycheck-disabled-checkers '(emacs-lisp-checkdoc))
+  ; https://stackoverflow.com/questions/37720869/emacs-how-do-i-set-flycheck-to-python-3
+  (custom-set-variables
+   '(flycheck-python-flake8-executable "python3")
+   '(flycheck-python-pycompile-executable "python3")
+   '(flycheck-python-pylint-executable "python3"))
+  (global-flycheck-mode))
+
+(use-package company
+  :diminish company-mode
+  :config
+  (company-tng-configure-default)
+  (setq company-idle-delay .01)
+  (setq company-minimum-prefix-length 1)
+  (global-company-mode))
+
+(use-package magit
+  :commands (magit-toplevel
+             magit-status
+             magit-blame
+             magit-log
+             magit-find-file
+             magit-find-file-other-window)
+  :config
+  (defun +magit-git-submodule-update--init--recursive ()
+    "Run $ git submodule update --init --recursive."
+    (interactive)
+    (magit-run-git-async "submodule" "update" "--init" "--recursive"))
+
+  (setq magit-bury-buffer-function 'magit-mode-quit-window)
+
+  (setq magit-diff-refine-hunk 'all)
+  ;(setq magit-diff-arguments '("--no-ext-diff" "--stat" "-U5"))
+
+  ;; Save buffers automatically instead of asking.
+  (setq magit-save-repository-buffers 'dontask)
+
+  (setq magit-repository-directories '("~/dev" "~/.emacs.d"))
+  (setq magit-refresh-status-buffer nil)
+
+  ;; Add rebase argument to pull
+  ;; https://github.com/magit/magit/issues/2597
+  (defun +magit-submodule-remove (path &optional leave-in-work-tree)
+    "Remove the submodule at PATH.
+     https://stackoverflow.com/questions/1260748/how-do-i-remove-a-submodule"
+    (interactive
+     (list (magit-completing-read "Remove module" (magit-get-submodules)
+                                  nil t nil nil (magit-section-when module))))
+    (magit-with-toplevel
+     ;; 0. mv a/submodule a/submodule_tmp
+     (shell-command (format "mv %s %s_tmp" path path))
+
+     ;; 1. git submodule deinit -f -- a/submodule
+     (magit-run-git "submodule" "deinit" "-f" "--" path)
+
+     ;; (magit-run-git-async "submodule" "deinit" path)
+
+     ;; 2. rm -rf .git/modules/a/submodule
+     (shell-command (format "rm -rf .git/modules/%s" path))
+
+     (if (not leave-in-work-tree)
+         ;; 3. git rm -f a/submodule
+         (magit-run-git "rm" "-f" path)
+       ;; # If you want to leave it in your working tree and have done step 0.
+       ;; 3b. git rm --cached a/submodule
+       ;; 3b. mv a/submodule_tmp a/submodule
+       (magit-run-git "rm" "--cached" path)
+       (shell-command-to-string (format "mv %s_tmp %s" path path)))))
+
+
+  (define-key magit-hunk-section-map (kbd "<return>") 'magit-diff-visit-file-other-window)
+
+  ;; Bind esc
+  (define-key transient-map        (kbd "<escape>") 'transient-quit-one)
+  (define-key transient-edit-map   (kbd "<escape>") 'transient-quit-one)
+  (define-key transient-sticky-map (kbd "<escape>") 'transient-quit-seq))
+
+
+;; makes handling lisp expressions much, much easier
+;; Cheatsheet: http://www.emacswiki.org/emacs/PareditCheatsheet
+(use-package paredit)
+
+(use-package exec-path-from-shell
+  :config
+  (when (memq window-system '(mac ns x))
+    (exec-path-from-shell-initialize)))
+
 (use-package habamax-theme
   :no-require t)
+
+(load "~/.emacs.d/typescript.el")
+(load "~/.emacs.d/clojure.el")
+(load "~/.emacs.d/java.el")
+
